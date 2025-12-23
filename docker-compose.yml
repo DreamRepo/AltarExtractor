@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  altar-extractor:
+    build: .
+    container_name: altar-extractor
+    ports:
+      - "8050:8050"
+    environment:
+      - PORT=8050
+      # Optionally set a default database name
+      # - SACRED_DB_NAME=sacred
+    restart: unless-stopped
+    # Uncomment to add health check
+    # healthcheck:
+    #   test: ["CMD", "curl", "-f", "http://localhost:8050/"]
+    #   interval: 30s
+    #   timeout: 10s
+    #   retries: 3
+
