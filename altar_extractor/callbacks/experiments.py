@@ -1,13 +1,20 @@
-from typing import Dict, List
+"""
+Experiments table callbacks for AltarExtractor.
+"""
+
+from typing import Dict
+from dash import dcc, Input, Output, State, no_update
+import json
 import random
-from dash import Input, Output, State, no_update, dcc
 import io
 import csv
-import json
+
 from ..services.data import build_table_from_runs
 
 
 def register_experiments_callbacks(app):
+    """Register experiments table callbacks."""
+
     @app.callback(
         Output("experiments-table", "columns"),
         Output("experiments-table", "data"),
@@ -20,7 +27,6 @@ def register_experiments_callbacks(app):
     def refresh_table(runs_cache, config_store, filters_store, selected_result_keys, random_store):
         runs = runs_cache or []
         selected = (config_store or {}).get("selected", [])
-
         active_filters = filters_store or {}
 
         def row_passes_filters(run_cfg: Dict) -> bool:
@@ -56,30 +62,22 @@ def register_experiments_callbacks(app):
                         return False
             return True
 
-        filtered_runs = []
-        for run in runs:
-            cfg = run.get("config", {}) or {}
-            if row_passes_filters(cfg):
-                filtered_runs.append(run)
+        filtered_runs = [run for run in runs if row_passes_filters(run.get("config", {}) or {})]
 
-        # Apply random ordering if enabled
         try:
             random_enabled = bool(random_store)
         except Exception:
             random_enabled = False
+
         if random_enabled and len(filtered_runs) > 1:
             random.shuffle(filtered_runs)
-
-        # Sort by run_id unless random ordering is enabled
-        if not random_enabled:
+        else:
             def run_id_sort_key(run: Dict):
                 rid = str(run.get("run_id", ""))
-                # Try decimal int
                 try:
                     return int(rid)
                 except Exception:
                     pass
-                # Try hex ObjectId
                 try:
                     if len(rid) == 24:
                         return int(rid, 16)
@@ -129,6 +127,47 @@ def register_experiments_callbacks(app):
         return not is_open
 
     @app.callback(
+        Output("download-exp-csv", "data"),
+        Input("download-exp-confirm", "n_clicks"),
+        State("download-exp-filename", "value"),
+        State("experiments-table", "columns"),
+        State("experiments-table", "data"),
+        prevent_initial_call=True,
+    )
+    def download_exp_csv(n_clicks, filename, columns, data_rows):
+        if not n_clicks:
+            return no_update
+        rows = data_rows or []
+        cols = columns or []
+        if len(rows) == 0 or len(cols) == 0:
+            return no_update
+
+        col_ids = [c.get("id") for c in cols if isinstance(c, dict) and c.get("id")]
+        col_names = [c.get("name", c.get("id")) for c in cols]
+
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(col_names)
+
+        def stringify(v):
+            if isinstance(v, (list, dict, tuple)):
+                try:
+                    return json.dumps(v, ensure_ascii=False, default=str)
+                except Exception:
+                    return str(v)
+            return v
+
+        for row in rows:
+            writer.writerow([stringify(row.get(cid, "")) for cid in col_ids])
+
+        csv_str = buf.getvalue()
+        buf.close()
+        safe_name = (filename or "").strip() or "experiments.csv"
+        if not safe_name.lower().endswith(".csv"):
+            safe_name += ".csv"
+        return dcc.send_string(csv_str, safe_name)
+
+    @app.callback(
         Output("experiments-table", "page_size"),
         Output("experiments-page-size-store", "data", allow_duplicate=True),
         Input("experiments-page-size-input", "value"),
@@ -171,47 +210,6 @@ def register_experiments_callbacks(app):
         return ["random"] if bool(saved) else []
 
     @app.callback(
-        Output("download-exp-csv", "data"),
-        Input("download-exp-confirm", "n_clicks"),
-        State("download-exp-filename", "value"),
-        State("experiments-table", "columns"),
-        State("experiments-table", "data"),
-        prevent_initial_call=True,
-    )
-    def download_exp_csv(n_clicks, filename, columns, data_rows):
-        if not n_clicks:
-            return no_update
-        rows = data_rows or []
-        cols = columns or []
-        if len(rows) == 0 or len(cols) == 0:
-            return no_update
-
-        col_ids = [c.get("id") for c in cols if isinstance(c, dict) and c.get("id")]
-        col_names = [c.get("name", c.get("id")) for c in cols]
-
-        buf = io.StringIO()
-        writer = csv.writer(buf)
-        writer.writerow(col_names)
-
-        def stringify(v):
-            if isinstance(v, (list, dict, tuple)):
-                try:
-                    return json.dumps(v, ensure_ascii=False, default=str)
-                except Exception:
-                    return str(v)
-            return v
-
-        for row in rows:
-            writer.writerow([stringify(row.get(cid, "")) for cid in col_ids])
-
-        csv_str = buf.getvalue()
-        buf.close()
-        safe_name = (filename or "").strip() or "experiments.csv"
-        if not safe_name.lower().endswith(".csv"):
-            safe_name += ".csv"
-        return dcc.send_string(csv_str, safe_name)
-
-    @app.callback(
         Output("results-select", "options"),
         Output("results-controls-row", "style"),
         Output("results-none-note", "children"),
@@ -244,5 +242,4 @@ def register_experiments_callbacks(app):
         if current_set == all_set:
             return []
         return all_values
-
 

@@ -1,25 +1,35 @@
+"""
+Main layout for AltarExtractor application.
+"""
+
 from dash import html, dcc, dash_table
 import dash_bootstrap_components as dbc
 from ..config import DEFAULT_DB_NAME
 
 
 def build_layout():
+    """Build and return the main application layout."""
     return dbc.Container(
         [
+            # Stores
             dcc.Store(id="creds-store", storage_type="local"),
             dcc.Store(id="ui-store", storage_type="local"),
             dcc.Store(id="db-history", storage_type="local"),
             dcc.Store(id="runs-cache", storage_type="memory"),
             dcc.Store(id="config-keys-store", storage_type="local"),
             dcc.Store(id="filters-store", storage_type="local"),
-            dcc.Store(id="experiments-random-store", storage_type="local"),
             dcc.Store(id="metrics-store", storage_type="memory"),
             dcc.Store(id="metrics-values-store", storage_type="memory"),
             dcc.Store(id="metrics-selected-store", storage_type="local"),
+            dcc.Store(id="experiments-random-store", storage_type="local"),
             dcc.Store(id="experiments-page-size-store", storage_type="local"),
             dcc.Store(id="metrics-page-size-store", storage_type="local"),
+            dcc.Store(id="metrics-show-keys-store", storage_type="local"),
+            dcc.Store(id="metrics-layout-mode-store", storage_type="local"),
             dcc.Store(id="results-store", storage_type="memory"),
             dcc.Interval(id="init-tick", interval=0, n_intervals=0, max_intervals=1),
+
+            # Navbar
             dbc.Navbar(
                 dbc.Container(
                     [
@@ -31,6 +41,8 @@ def build_layout():
                 sticky="top",
                 class_name="mb-3",
             ),
+
+            # Connection credentials panel
             dbc.Collapse(
                 id="connection-collapse",
                 is_open=True,
@@ -41,50 +53,72 @@ def build_layout():
                                 dbc.CardBody(
                                     [
                                         html.P("Enter your MongoDB credentials or a MongoDB URI."),
+                                        # Connection mode switch
                                         dbc.Row(
                                             [
                                                 dbc.Col(
-                                                    dcc.Input(
-                                                        id="uri-input",
-                                                        placeholder="MongoDB URI (e.g. mongodb+srv://user:pass@cluster/db?authSource=admin)",
-                                                        type="text",
-                                                        value="",
-                                                        style={"width": "100%"},
+                                                    dbc.RadioItems(
+                                                        options=[
+                                                            {"label": "Use URI", "value": "uri"},
+                                                            {"label": "Use Credentials", "value": "credentials"},
+                                                        ],
+                                                        value="credentials",
+                                                        id="connection-mode-switch",
+                                                        inline=True,
                                                     ),
-                                                    width=12,
+                                                    md=12,
                                                 ),
                                             ],
-                                            class_name="mb-2",
+                                            class_name="mb-3",
                                         ),
-                                        dbc.Row(
-                                            [
-                                                dbc.Col(dcc.Input(id="host-input", placeholder="Host (default: localhost)", type="text", value="", style={"width": "100%"}), md=6),
-                                                dbc.Col(dcc.Input(id="port-input", placeholder="Port (default: 27017)", type="text", value="", style={"width": "100%"}), md=6),
-                                            ],
-                                            class_name="mb-2",
-                                        ),
-                                        dbc.Row(
-                                            [
-                                                dbc.Col(dcc.Input(id="username-input", placeholder="Username (optional)", type="text", value="", style={"width": "100%"}), md=6),
-                                                dbc.Col(dcc.Input(id="password-input", placeholder="Password (optional)", type="password", value="", style={"width": "100%"}), md=6),
-                                            ],
-                                            class_name="mb-2",
-                                        ),
-                                    dbc.Row(
-                                        [
-                                            dbc.Col(
-                                                dcc.Input(
-                                                    id="authsource-input",
-                                                    placeholder="authSource (default: database name)",
-                                                    type="text",
-                                                    value="",
-                                                    style={"width": "100%"},
+                                        # URI mode fields
+                                        html.Div(
+                                            id="uri-mode-fields",
+                                            children=[
+                                                dbc.Row(
+                                                    [
+                                                        dbc.Col(
+                                                            dcc.Input(
+                                                                id="uri-input",
+                                                                placeholder="MongoDB URI (e.g. mongodb+srv://user:pass@cluster/db?authSource=admin)",
+                                                                type="text",
+                                                                value="",
+                                                                style={"width": "100%"},
+                                                            ),
+                                                            width=12,
+                                                        ),
+                                                    ],
+                                                    class_name="mb-2",
                                                 ),
-                                                md=12,
-                                            ),
-                                        ],
-                                        class_name="mb-2",
-                                    ),
+                                            ],
+                                            style={"display": "none"},
+                                        ),
+                                        # Credentials mode fields
+                                        html.Div(
+                                            id="credentials-mode-fields",
+                                            children=[
+                                                dbc.Row(
+                                                    [
+                                                        dbc.Col(dcc.Input(id="host-input", placeholder="Host (default: localhost)", type="text", value="", style={"width": "100%"}), md=6),
+                                                        dbc.Col(dcc.Input(id="port-input", placeholder="Port (default: 27017)", type="text", value="", style={"width": "100%"}), md=6),
+                                                    ],
+                                                    class_name="mb-2",
+                                                ),
+                                                dbc.Row(
+                                                    [
+                                                        dbc.Col(dcc.Input(id="username-input", placeholder="Username (optional)", type="text", value="", style={"width": "100%"}), md=6),
+                                                        dbc.Col(dcc.Input(id="password-input", placeholder="Password (optional)", type="password", value="", style={"width": "100%"}), md=6),
+                                                    ],
+                                                    class_name="mb-2",
+                                                ),
+                                                dbc.Row(
+                                                    [
+                                                        dbc.Col(dcc.Input(id="authsource-input", placeholder="Auth source (default: database name)", type="text", value="", style={"width": "100%"}), md=12),
+                                                    ],
+                                                    class_name="mb-2",
+                                                ),
+                                            ],
+                                        ),
                                         dbc.Row(
                                             [
                                                 dbc.Col(
@@ -124,6 +158,8 @@ def build_layout():
                     class_name="g-2",
                 ),
             ),
+
+            # Database name + Connect button row
             dbc.Row(
                 [
                     dbc.Col(
@@ -151,6 +187,8 @@ def build_layout():
                 ],
                 class_name="g-2 align-items-end mb-3",
             ),
+
+            # Select Keys card
             dbc.Card(
                 [
                     dbc.CardHeader(
@@ -172,7 +210,7 @@ def build_layout():
                                     dbc.Col(
                                         dbc.Card(
                                             [
-                                                dbc.CardHeader("Available config keys"),
+                                                dbc.CardHeader("Available config keys ([type] [distinct value counts])"),
                                                 dbc.CardBody(
                                                     [
                                                         dcc.Dropdown(
@@ -183,7 +221,7 @@ def build_layout():
                                                             placeholder="Select config keys...",
                                                         ),
                                                         html.Div(id="config-keys-none-note", style={"color": "#666", "marginTop": "0.25rem", "marginBottom": "0.75rem"}),
-                                                    dbc.Button("Check/Uncheck all", id="config-keys-toggle-all", size="sm", color="secondary", class_name="mb-2"),
+                                                        dbc.Button("Check/Uncheck all", id="config-keys-toggle-all", size="sm", color="secondary", class_name="mb-2"),
                                                         dbc.ListGroup(id="available-keys", style={"display": "none"}),
                                                     ]
                                                 ),
@@ -209,6 +247,8 @@ def build_layout():
                 ],
                 class_name="mb-3",
             ),
+
+            # Experiments card
             dbc.Card(
                 [
                     dbc.CardHeader(
@@ -234,15 +274,14 @@ def build_layout():
                                                 dbc.Col(dcc.Dropdown(id="results-select", options=[], value=[], multi=True, placeholder="Select result keys...")),
                                             ],
                                             id="results-controls-row",
-                                            class_name="g-2 mb-2 align-items-center",
+                                            class_name="g-2 mb-1 align-items-center",
                                         ),
-                                        # Page size and random order (persisted)
                                         dbc.Row(
                                             [
                                                 dbc.Col(
                                                     [
                                                         dbc.Label("Number of rows"),
-                                                        dcc.Input(id="experiments-page-size-input", type="number", value=10, min=1, step=1, style={"width": "120px", "marginLeft": "8px"}),
+                                                        dcc.Input(id="experiments-page-size-input", type="number", value=10, min=1, step=1, style={"width": "80px", "marginLeft": "8px"}),
                                                     ],
                                                     width="auto",
                                                 ),
@@ -257,9 +296,9 @@ def build_layout():
                                                     class_name="ms-2",
                                                 ),
                                             ],
-                                            class_name="g-2 mb-2 align-items-center",
+                                            class_name="g-2 mb-1 align-items-center",
                                         ),
-                                        html.Div(id="results-none-note", style={"color": "#666", "marginTop": "0.25rem", "marginBottom": "0.75rem"}),
+                                        html.Div(id="results-none-note", style={"color": "#666", "marginTop": "0.25rem", "marginBottom": "0.25rem"}),
                                     ]
                                 ),
                                 dash_table.DataTable(
@@ -279,8 +318,26 @@ def build_layout():
                                 ),
                                 dbc.Modal(
                                     [
+                                        dbc.ModalHeader("Open in Pygwalker"),
+                                        dbc.ModalBody(
+                                            html.Div(
+                                                [
+                                                    html.P("Choose which columns to include:"),
+                                                    dbc.Button("All keys", id="open-exp-all-keys", color="primary", class_name="me-2"),
+                                                    dbc.Button("Only selected keys", id="open-exp-selected-keys", color="secondary"),
+                                                ]
+                                            )
+                                        ),
+                                    ],
+                                    id="open-exp-modal",
+                                    is_open=False,
+                                ),
+                                dbc.Modal(
+                                    [
                                         dbc.ModalHeader("Download CSV"),
-                                        dbc.ModalBody(dbc.Input(id="download-exp-filename", type="text", placeholder="experiments.csv", value="experiments.csv")),
+                                        dbc.ModalBody(
+                                            dbc.Input(id="download-exp-filename", type="text", placeholder="experiments.csv", value="experiments.csv")
+                                        ),
                                         dbc.ModalFooter(
                                             [
                                                 dbc.Button("Cancel", id="download-exp-cancel", class_name="me-2"),
@@ -300,6 +357,8 @@ def build_layout():
                 ],
                 class_name="mb-3",
             ),
+
+            # Metrics card
             dbc.Card(
                 [
                     dbc.CardHeader(
@@ -327,19 +386,6 @@ def build_layout():
                                             id="metrics-controls-row",
                                             class_name="g-2 align-items-center",
                                         ),
-                                        # Page size selector row (persisted)
-                                        dbc.Row(
-                                            [
-                                                dbc.Col(
-                                                    [
-                                                        dbc.Label("Number of rows"),
-                                                        dcc.Input(id="metrics-page-size-input", type="number", value=10, min=1, step=1, style={"width": "120px", "marginLeft": "8px"}),
-                                                    ],
-                                                    width="auto",
-                                                ),
-                                            ],
-                                            class_name="g-2 align-items-center",
-                                        ),
                                         html.Div(id="metrics-none-note", style={"color": "#666", "marginTop": "0.5rem"}),
                                     ]
                                 ),
@@ -347,6 +393,41 @@ def build_layout():
                                     [
                                         html.Hr(),
                                         html.Div("Per-step metrics table", style={"fontWeight": "600", "marginBottom": "0.5rem"}),
+                                        dbc.Row(
+                                            [
+                                                dbc.Col(
+                                                    [
+                                                        dbc.Label("Number of rows"),
+                                                        dcc.Input(id="metrics-page-size-input", type="number", value=10, min=1, step=1, style={"width": "80px", "marginLeft": "8px"}),
+                                                    ],
+                                                    width="auto",
+                                                ),
+                                                dbc.Col(
+                                                    dbc.Checklist(
+                                                        options=[{"label": "Show selected keys", "value": "show"}],
+                                                        value=["show"],
+                                                        id="metrics-show-keys-switch",
+                                                        switch=True,
+                                                    ),
+                                                    width="auto",
+                                                    class_name="ms-3",
+                                                ),
+                                                dbc.Col(
+                                                    dbc.RadioItems(
+                                                        options=[
+                                                            {"label": "Steps as rows", "value": "rows"},
+                                                            {"label": "Steps as columns", "value": "cols"},
+                                                        ],
+                                                        value="rows",
+                                                        id="metrics-layout-mode",
+                                                        inline=True,
+                                                    ),
+                                                    width="auto",
+                                                    class_name="ms-3",
+                                                ),
+                                            ],
+                                            class_name="g-2 align-items-center mb-2",
+                                        ),
                                         dash_table.DataTable(
                                             id="metrics-steps-table",
                                             columns=[{"name": "Experiment", "id": "experiment"}],
@@ -364,8 +445,26 @@ def build_layout():
                                         ),
                                         dbc.Modal(
                                             [
+                                                dbc.ModalHeader("Open in Pygwalker"),
+                                                dbc.ModalBody(
+                                                    html.Div(
+                                                        [
+                                                            html.P("Choose which columns to include:"),
+                                                            dbc.Button("All keys", id="open-steps-all-keys", color="primary", class_name="me-2"),
+                                                            dbc.Button("Only selected keys", id="open-steps-selected-keys", color="secondary"),
+                                                        ]
+                                                    )
+                                                ),
+                                            ],
+                                            id="open-steps-modal",
+                                            is_open=False,
+                                        ),
+                                        dbc.Modal(
+                                            [
                                                 dbc.ModalHeader("Download CSV"),
-                                                dbc.ModalBody(dbc.Input(id="download-steps-filename", type="text", placeholder="metrics_steps.csv", value="metrics_steps.csv")),
+                                                dbc.ModalBody(
+                                                    dbc.Input(id="download-steps-filename", type="text", placeholder="metrics_steps.csv", value="metrics_steps.csv")
+                                                ),
                                                 dbc.ModalFooter(
                                                     [
                                                         dbc.Button("Cancel", id="download-steps-cancel", class_name="me-2"),
@@ -393,5 +492,4 @@ def build_layout():
         ],
         fluid=True,
     )
-
 

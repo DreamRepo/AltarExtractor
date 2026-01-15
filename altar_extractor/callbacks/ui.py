@@ -1,9 +1,13 @@
-from dash import html, no_update
-from dash import Input, Output, State
-import dash
+"""
+UI toggle and display callbacks for AltarExtractor.
+"""
+
+from dash import Input, Output, State, no_update
 
 
 def register_ui_callbacks(app):
+    """Register UI-related callbacks for panel toggles and display."""
+
     @app.callback(
         Output("connection-collapse", "is_open"),
         Output("ui-store", "data"),
@@ -27,29 +31,6 @@ def register_ui_callbacks(app):
         if not ui_data:
             return no_update
         return bool(ui_data.get("connection_open", True))
-
-    @app.callback(
-        Output("db-history", "data"),
-        Input("connect-button", "n_clicks"),
-        State("db-name-input", "value"),
-        State("db-history", "data"),
-        prevent_initial_call=True,
-    )
-    def update_db_history(n_clicks, db_name, db_history):
-        if not db_name:
-            return no_update
-        history = db_history or []
-        if db_name in history:
-            return history
-        return ([db_name] + history)[:20]
-
-    @app.callback(
-        Output("db-name-list", "children"),
-        Input("db-history", "data"),
-    )
-    def render_db_datalist(db_history):
-        options = db_history or []
-        return [html.Option(value=opt) for opt in options]
 
     @app.callback(
         Output("select-keys-collapse", "is_open"),
@@ -85,20 +66,10 @@ def register_ui_callbacks(app):
         return not is_open
 
     @app.callback(
-        Output("db-name-input", "value"),
-        Input("db-history", "data"),
-        Input("creds-store", "data"),
-        State("db-name-input", "value"),
-        prevent_initial_call=False,
+        Output("metrics-per-step-section", "style"),
+        Input("metrics-select", "options"),
     )
-    def set_db_name_from_history(db_history, creds_data, current_value):
-        if current_value:
-            return dash.no_update
-        saved_db = (creds_data or {}).get("db_name") if isinstance(creds_data, dict) else None
-        if isinstance(saved_db, str) and saved_db.strip():
-            return saved_db
-        if db_history and isinstance(db_history, list) and len(db_history) > 0:
-            return db_history[0]
-        return dash.no_update
-
+    def toggle_metrics_section(options):
+        has_metrics = isinstance(options, list) and len(options) > 0
+        return {} if has_metrics else {"display": "none"}
 

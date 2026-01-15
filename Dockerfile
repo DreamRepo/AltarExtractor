@@ -29,5 +29,5 @@ EXPOSE 8050
 
 # Run the application with Gunicorn (production WSGI server)
 # 4 workers, bind to all interfaces on PORT
-CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT} --workers 4 --threads 2 app:server"]
+CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT} --workers 4 --threads 2 main:server"]
 

@@ -1,4 +1,8 @@
-from typing import Dict, List, Optional, Tuple
+"""
+MongoDB service functions for AltarExtractor.
+"""
+
+from typing import Dict, List, Optional
 from bson import ObjectId
 import pymongo
 
@@ -26,10 +30,11 @@ def build_mongodb_uri(
     resolved_db_name = (database_name or "").strip()
     resolved_auth_source = (auth_source or "").strip()
 
+    # No auth case
     if not resolved_username:
         return f"mongodb://{resolved_host}:{resolved_port}/"
 
-    # Preferred explicit auth source when provided, otherwise fall back to database_name
+    # Auth case; include authSource using explicit value or the database name when provided
     effective_auth_source = resolved_auth_source or resolved_db_name
     if effective_auth_source:
         return (
@@ -39,7 +44,13 @@ def build_mongodb_uri(
     return f"mongodb://{resolved_username}:{resolved_password}@{resolved_host}:{resolved_port}/"
 
 
-def fetch_sacred_experiment_names(client: pymongo.MongoClient, database_name: str) -> List[str]:
+def fetch_sacred_experiment_names(
+    client: pymongo.MongoClient, database_name: str
+) -> List[str]:
+    """
+    Return a sorted list of experiment names stored by Sacred.
+    Sacred's MongoObserver stores runs in the 'runs' collection with the field 'experiment.name'.
+    """
     db = client[database_name]
     if "runs" not in db.list_collection_names():
         return []
@@ -49,6 +60,9 @@ def fetch_sacred_experiment_names(client: pymongo.MongoClient, database_name: st
 
 
 def fetch_config_keys(client: pymongo.MongoClient, database_name: str) -> List[str]:
+    """
+    Return sorted list of distinct top-level keys found in the 'config' field of Sacred runs.
+    """
     db = client[database_name]
     if "runs" not in db.list_collection_names():
         return []
@@ -65,10 +79,16 @@ def fetch_config_keys(client: pymongo.MongoClient, database_name: str) -> List[s
 
 
 def fetch_runs_docs(client: pymongo.MongoClient, database_name: str, limit: int = 500) -> List[Dict]:
+    """
+    Fetch a subset of runs with experiment name and config for table rendering.
+    """
     db = client[database_name]
     if "runs" not in db.list_collection_names():
         return []
-    cursor = db["runs"].find({}, {"_id": 1, "experiment.name": 1, "config": 1, "info.metrics": 1, "info.result": 1}).limit(limit)
+    cursor = db["runs"].find(
+        {},
+        {"_id": 1, "experiment.name": 1, "config": 1, "info.metrics": 1, "info.result": 1}
+    ).limit(limit)
     runs: List[Dict] = []
     for doc in cursor:
         run_id = str(doc.get("_id"))
@@ -83,11 +103,21 @@ def fetch_runs_docs(client: pymongo.MongoClient, database_name: str, limit: int 
         info = doc.get("info") if isinstance(doc.get("info", {}), dict) else {}
         metrics = (info or {}).get("metrics", None)
         result = (info or {}).get("result", None)
-        runs.append({"run_id": run_id, "experiment": exp_name, "config": cfg, "metrics": metrics, "result": result})
+        runs.append({
+            "run_id": run_id,
+            "experiment": exp_name,
+            "config": cfg,
+            "metrics": metrics,
+            "result": result
+        })
     return runs
 
 
 def fetch_metrics_list(client: pymongo.MongoClient, database_name: str, limit: int = 1000) -> List[Dict]:
+    """
+    Fetch available metrics from the 'metrics' collection.
+    Returns a list of dicts with at least {'id': str, 'name': str}.
+    """
     db = client[database_name]
     if "metrics" not in db.list_collection_names():
         return []
@@ -107,6 +137,9 @@ def fetch_metrics_list(client: pymongo.MongoClient, database_name: str, limit: i
 
 
 def fetch_metrics_values_map(client: pymongo.MongoClient, database_name: str, id_strs: List[str]) -> Dict[str, Dict]:
+    """
+    Fetch metric values and steps for a list of metric IDs.
+    """
     if not id_strs:
         return {}
     db = client[database_name]
@@ -127,5 +160,4 @@ def fetch_metrics_values_map(client: pymongo.MongoClient, database_name: str, id
             "steps": doc.get("steps", []),
         }
     return values_by_id
-
 

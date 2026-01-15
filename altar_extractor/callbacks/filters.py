@@ -1,12 +1,17 @@
-from typing import Dict, List
-import json
-from dash import html, dcc
-from dash import Input, Output, State, ALL, no_update
+"""
+Filter-related callbacks for AltarExtractor.
+"""
+
+from typing import Dict
+from dash import html, dcc, Input, Output, State, no_update, ALL
 import dash
 import dash_bootstrap_components as dbc
+import json
 
 
 def register_filters_callbacks(app):
+    """Register filter-related callbacks."""
+
     @app.callback(
         Output("config-keys-select", "options"),
         Output("config-keys-select", "value"),
@@ -22,8 +27,8 @@ def register_filters_callbacks(app):
         selected = data.get("selected", []) or []
         all_keys = sorted(set(list(available) + list(selected)))
 
-        # Compute type and distinct value counts across all known keys
         runs = runs_cache or []
+
         def type_name_for_value(value):
             if value is None:
                 return None
@@ -79,9 +84,7 @@ def register_filters_callbacks(app):
         options = [{"label": f"{k} ({key_to_type.get(k, 'unknown')} {key_to_value_count.get(k, 0)})", "value": k} for k in all_keys]
         if len(options) == 0:
             return [], [], {"display": "none"}, "No config keys found"
-        # Keep only selected that are still present in all_keys
         selected_clean = [k for k in selected if k in set(all_keys)]
-        # Note: show hint when all selected
         note = "All keys selected" if (len(selected_clean) == len(all_keys) and len(all_keys) > 0) else ""
         return options, selected_clean, {}, note
 
@@ -112,7 +115,6 @@ def register_filters_callbacks(app):
         store = config_store or {"available": [], "selected": []}
         available = store.get("available", []) or []
         selected = store.get("selected", []) or []
-
         runs = runs_cache or []
         keys_to_check = set(list(available) + list(selected))
 
@@ -149,14 +151,14 @@ def register_filters_callbacks(app):
             else:
                 key_to_type[key] = "mixed"
 
-        key_to_str_values: Dict[str, List[str]] = {}
-        key_to_value_count: Dict[str, int] = {}
-
         def encode_for_set(value):
             try:
                 return json.dumps(value, sort_keys=True, ensure_ascii=False, default=str)
             except Exception:
                 return str(value)
+
+        key_to_str_values: Dict[str, list] = {}
+        key_to_value_count: Dict[str, int] = {}
 
         for key in selected:
             values = set()
@@ -192,12 +194,11 @@ def register_filters_callbacks(app):
         ]
 
         existing_filters = filters_store or {}
-
         selected_children = []
+
         for key in selected:
             ktype = key_to_type.get(key, "unknown")
             current = existing_filters.get(key, {}) if isinstance(existing_filters, dict) else {}
-
             cnt = key_to_value_count.get(key, 0)
             label = html.Div(f"{key} ({cnt})")
 
@@ -339,8 +340,7 @@ def register_filters_callbacks(app):
             if isinstance(vals, list):
                 filters.setdefault(key, {})["values"] = vals
 
-        filtered_out = {k: v for k, v in filters.items() if k in selected}
-        return filtered_out
+        return {k: v for k, v in filters.items() if k in selected}
 
     @app.callback(
         Output("config-keys-store", "data", allow_duplicate=True),
@@ -356,9 +356,9 @@ def register_filters_callbacks(app):
         prevent_initial_call=True,
     )
     def move_keys(available_clicks, remove_clicks, up_clicks, down_clicks, available_ids, remove_ids, up_ids, down_ids, store):
-        ctx = dash.callback_context  # type: ignore
+        ctx = dash.callback_context
         if not ctx.triggered or store is None:
-            return dash.no_update
+            return no_update
 
         store = store or {"available": [], "selected": []}
         available = list(store.get("available", []) or [])
@@ -368,7 +368,7 @@ def register_filters_callbacks(app):
         try:
             trigger_id = json.loads(triggered)
         except Exception:
-            return dash.no_update
+            return no_update
 
         try:
             triggered_value = ctx.triggered[0].get("value", None)
@@ -376,7 +376,7 @@ def register_filters_callbacks(app):
             triggered_value = None
         if trigger_id.get("type") in {"available-key", "remove-selected-key", "move-up", "move-down"}:
             if not isinstance(triggered_value, int) or triggered_value <= 0:
-                return dash.no_update
+                return no_update
 
         if trigger_id.get("type") == "available-key":
             key = trigger_id.get("key")
@@ -414,17 +414,14 @@ def register_filters_callbacks(app):
     )
     def toggle_all_config_keys(n_clicks, store):
         if not n_clicks:
-            return dash.no_update
+            return no_update
         store = store or {"available": [], "selected": []}
         available = list(store.get("available", []) or [])
         selected = list(store.get("selected", []) or [])
         union_keys = list(available) + list(selected)
         if len(union_keys) == 0:
-            return dash.no_update
-        # If everything already selected, unselect all
+            return no_update
         if len(available) == 0 and len(selected) == len(union_keys):
             return {"available": sorted(union_keys), "selected": []}
-        # Otherwise select all
         return {"available": [], "selected": union_keys}
-
 

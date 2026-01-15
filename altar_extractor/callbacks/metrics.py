@@ -1,12 +1,18 @@
+"""
+Metrics table callbacks for AltarExtractor.
+"""
+
 from typing import Dict, List
-from dash import Input, Output, State, no_update, dcc
+from dash import dcc, Input, Output, State, no_update
+from bson import ObjectId
+import json
 import io
 import csv
-import json
-from bson import ObjectId
 
 
 def register_metrics_callbacks(app):
+    """Register metrics table callbacks."""
+
     @app.callback(
         Output("metrics-steps-table", "columns"),
         Output("metrics-steps-table", "data"),
@@ -15,12 +21,16 @@ def register_metrics_callbacks(app):
         Input("filters-store", "data"),
         Input("metrics-select", "value"),
         Input("metrics-values-store", "data"),
+        Input("metrics-show-keys-switch", "value"),
+        Input("metrics-layout-mode", "value"),
     )
-    def refresh_metrics_steps_table(runs_cache, config_store, filters_store, selected_metrics_names, metrics_values_map):
+    def refresh_metrics_steps_table(runs_cache, config_store, filters_store, selected_metrics_names, metrics_values_map, show_keys_switch, layout_mode):
         runs = runs_cache or []
         selected = (config_store or {}).get("selected", [])
         metrics_values_map = metrics_values_map or {}
         selected_metrics = [m for m in (selected_metrics_names or []) if isinstance(m, str) and m.strip()]
+        show_selected_keys = bool(show_keys_switch and "show" in show_keys_switch)
+        steps_as_columns = (layout_mode == "cols")
 
         active_filters = filters_store or {}
 
@@ -57,16 +67,7 @@ def register_metrics_callbacks(app):
                         return False
             return True
 
-        filtered_runs = []
-        for run in runs:
-            cfg = run.get("config", {}) or {}
-            if row_passes_filters(cfg):
-                filtered_runs.append(run)
-
-        columns = [{"name": "run_id", "id": "run_id"}, {"name": "Experiment", "id": "experiment"}] + [{"name": key, "id": key} for key in selected]
-        columns.append({"name": "Step", "id": "step"})
-        for mname in selected_metrics:
-            columns.append({"name": mname, "id": f"metric:{mname}"})
+        filtered_runs = [run for run in runs if row_passes_filters(run.get("config", {}) or {})]
 
         def extract_metric_id_for_run(run_metrics, metric_name):
             if isinstance(run_metrics, dict):
@@ -85,34 +86,77 @@ def register_metrics_callbacks(app):
                         return None
             return None
 
-        rows: List[Dict] = []
+        run_data = []
+        all_step_values = set()
         for run in filtered_runs:
             base = {"run_id": run.get("run_id", ""), "experiment": run.get("experiment", "")}
             cfg = run.get("config", {}) or {}
-            for key in selected:
-                base[key] = cfg.get(key)
+            if show_selected_keys:
+                for key in selected:
+                    base[key] = cfg.get(key)
 
             run_metrics = run.get("metrics", None)
             step_grid = None
             metric_series: Dict[str, List] = {}
+            metric_steps: Dict[str, List] = {}
             for mname in selected_metrics:
                 mid = extract_metric_id_for_run(run_metrics, mname)
                 payload = metrics_values_map.get(str(mid), {}) if mid else {}
                 values = payload.get("values") or []
                 steps = payload.get("steps") or list(range(len(values)))
                 metric_series[mname] = values
+                metric_steps[mname] = steps
+                for s in steps:
+                    all_step_values.add(s)
                 if steps and (step_grid is None or len(steps) > len(step_grid)):
                     step_grid = steps
             if step_grid is None:
                 continue
+            run_data.append({"base": base, "step_grid": step_grid, "metric_series": metric_series, "metric_steps": metric_steps})
 
-            for idx, step in enumerate(step_grid):
-                row = dict(base)
-                row["step"] = step
+        sorted_steps = sorted(all_step_values)
+        rows: List[Dict] = []
+
+        if steps_as_columns:
+            columns = [{"name": "run_id", "id": "run_id"}, {"name": "Experiment", "id": "experiment"}]
+            if show_selected_keys:
+                columns += [{"name": key, "id": key} for key in selected]
+            columns.append({"name": "Metric", "id": "metric_name"})
+            for step_val in sorted_steps:
+                columns.append({"name": str(step_val), "id": f"step:{step_val}"})
+
+            for rd in run_data:
+                base = rd["base"]
+                metric_series = rd["metric_series"]
+                metric_steps = rd["metric_steps"]
                 for mname in selected_metrics:
+                    row = dict(base)
+                    row["metric_name"] = mname
                     series = metric_series.get(mname, [])
-                    row[f"metric:{mname}"] = series[idx] if idx < len(series) else ""
-                rows.append(row)
+                    steps = metric_steps.get(mname, [])
+                    step_to_value = {s: v for s, v in zip(steps, series)}
+                    for step_val in sorted_steps:
+                        row[f"step:{step_val}"] = step_to_value.get(step_val, "")
+                    rows.append(row)
+        else:
+            columns = [{"name": "run_id", "id": "run_id"}, {"name": "Experiment", "id": "experiment"}]
+            if show_selected_keys:
+                columns += [{"name": key, "id": key} for key in selected]
+            columns.append({"name": "Step", "id": "step"})
+            for mname in selected_metrics:
+                columns.append({"name": mname, "id": f"metric:{mname}"})
+
+            for rd in run_data:
+                base = rd["base"]
+                step_grid = rd["step_grid"]
+                metric_series = rd["metric_series"]
+                for idx, step in enumerate(step_grid):
+                    row = dict(base)
+                    row["step"] = step
+                    for mname in selected_metrics:
+                        series = metric_series.get(mname, [])
+                        row[f"metric:{mname}"] = series[idx] if idx < len(series) else ""
+                    rows.append(row)
 
         return columns, rows
 
@@ -169,6 +213,64 @@ def register_metrics_callbacks(app):
         return dcc.send_string(csv_str, safe_name)
 
     @app.callback(
+        Output("metrics-steps-table", "page_size"),
+        Output("metrics-page-size-store", "data", allow_duplicate=True),
+        Input("metrics-page-size-input", "value"),
+        prevent_initial_call=True,
+    )
+    def set_metrics_page_size(value):
+        try:
+            v = int(value)
+            v = v if v and v > 0 else 10
+            return v, v
+        except Exception:
+            return 10, 10
+
+    @app.callback(
+        Output("metrics-page-size-input", "value", allow_duplicate=True),
+        Input("metrics-page-size-store", "data"),
+        prevent_initial_call=True,
+    )
+    def restore_metrics_page_size(saved):
+        try:
+            v = int(saved)
+            return v if v and v > 0 else 10
+        except Exception:
+            return 10
+
+    @app.callback(
+        Output("metrics-show-keys-store", "data", allow_duplicate=True),
+        Input("metrics-show-keys-switch", "value"),
+        prevent_initial_call=True,
+    )
+    def persist_metrics_show_keys(value):
+        return bool(value and "show" in value)
+
+    @app.callback(
+        Output("metrics-show-keys-switch", "value", allow_duplicate=True),
+        Input("metrics-show-keys-store", "data"),
+        prevent_initial_call=True,
+    )
+    def restore_metrics_show_keys(saved):
+        return ["show"] if saved else []
+
+    @app.callback(
+        Output("metrics-layout-mode-store", "data", allow_duplicate=True),
+        Input("metrics-layout-mode", "value"),
+        prevent_initial_call=True,
+    )
+    def persist_metrics_layout_mode(value):
+        return value or "rows"
+
+    @app.callback(
+        Output("metrics-layout-mode", "value", allow_duplicate=True),
+        Input("metrics-layout-mode-store", "data"),
+        prevent_initial_call=True,
+    )
+    def restore_metrics_layout_mode(saved):
+        return saved if saved in ("rows", "cols") else "rows"
+
+    @app.callback(
         Output("metrics-select", "options"),
         Output("metrics-controls-row", "style"),
         Output("metrics-none-note", "children"),
@@ -222,39 +324,4 @@ def register_metrics_callbacks(app):
         available = set([opt.get("value") for opt in (options or []) if isinstance(opt, dict)])
         desired = [v for v in (saved_values or []) if v in available]
         return desired
-
-    @app.callback(
-        Output("metrics-per-step-section", "style"),
-        Input("metrics-select", "options"),
-    )
-    def toggle_metrics_section(options):
-        has_metrics = isinstance(options, list) and len(options) > 0
-        return {} if has_metrics else {"display": "none"}
-
-    @app.callback(
-        Output("metrics-steps-table", "page_size"),
-        Output("metrics-page-size-store", "data", allow_duplicate=True),
-        Input("metrics-page-size-input", "value"),
-        prevent_initial_call=True,
-    )
-    def set_metrics_page_size(value):
-        try:
-            v = int(value)
-            v = v if v and v > 0 else 10
-            return v, v
-        except Exception:
-            return 10, 10
-
-    @app.callback(
-        Output("metrics-page-size-input", "value", allow_duplicate=True),
-        Input("metrics-page-size-store", "data"),
-        prevent_initial_call=True,
-    )
-    def restore_metrics_page_size(saved):
-        try:
-            v = int(saved)
-            return v if v and v > 0 else 10
-        except Exception:
-            return 10
-
 

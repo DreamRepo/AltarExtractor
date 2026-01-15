@@ -23,8 +23,8 @@ except Exception:
 # Add assets folder
 datas += [('assets', 'assets')]
 
-# Add dream_extractor package
-datas += [('dream_extractor', 'dream_extractor')]
+# Add altar_extractor package
+datas += [('altar_extractor', 'altar_extractor')]
 
 # Collect hidden imports
 hiddenimports = [
@@ -45,23 +45,22 @@ hiddenimports = [
     'bson',
     'pygwalker',
     'pygwalker.api.html',
-    'gunicorn',
-    'dream_extractor',
-    'dream_extractor.callbacks',
-    'dream_extractor.callbacks.connection',
-    'dream_extractor.callbacks.experiments',
-    'dream_extractor.callbacks.filters',
-    'dream_extractor.callbacks.metrics',
-    'dream_extractor.callbacks.pygwalker',
-    'dream_extractor.callbacks.ui',
-    'dream_extractor.components',
-    'dream_extractor.components.layout',
-    'dream_extractor.config',
-    'dream_extractor.services',
-    'dream_extractor.services.data',
-    'dream_extractor.services.mongo',
-    'dream_extractor.state',
-    'dream_extractor.state.cache',
+    'altar_extractor',
+    'altar_extractor.callbacks',
+    'altar_extractor.callbacks.connection',
+    'altar_extractor.callbacks.experiments',
+    'altar_extractor.callbacks.filters',
+    'altar_extractor.callbacks.metrics',
+    'altar_extractor.callbacks.pygwalker',
+    'altar_extractor.callbacks.ui',
+    'altar_extractor.components',
+    'altar_extractor.components.layout',
+    'altar_extractor.config',
+    'altar_extractor.services',
+    'altar_extractor.services.data',
+    'altar_extractor.services.mongo',
+    'altar_extractor.state',
+    'altar_extractor.state.cache',
 ]
 
 # Collect all dash submodules
@@ -105,4 +104,3 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
 )
-

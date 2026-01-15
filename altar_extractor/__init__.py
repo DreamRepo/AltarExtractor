@@ -1,3 +1,9 @@
+"""
+AltarExtractor - Sacred MongoDB Experiment Viewer
+
+A Dash application for exploring Sacred experiment data stored in MongoDB.
+"""
+
 import dash
 import dash_bootstrap_components as dbc
 
@@ -16,5 +22,4 @@ def create_app() -> tuple[dash.Dash, "dash.Dash.server"]:
         ],
     )
     return app, app.server
-
 
