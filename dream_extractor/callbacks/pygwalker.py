@@ -1,4 +1,4 @@
-from dash import Input, Output, ClientsideFunction, no_update
+from dash import Input, Output, State, ClientsideFunction, no_update
 from flask import request, make_response
 import pandas as pd
 import uuid
