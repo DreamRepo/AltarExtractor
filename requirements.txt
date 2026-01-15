@@ -4,3 +4,4 @@ dnspython
 dash-bootstrap-components
 pandas
 pygwalker
+gunicorn

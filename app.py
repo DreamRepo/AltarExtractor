@@ -297,38 +297,68 @@ app.layout = dbc.Container(
                                     dbc.Row(
                                         [
                                             dbc.Col(
-                                                dcc.Input(
-                                                    id="uri-input",
-                                                    placeholder="MongoDB URI (e.g. mongodb+srv://user:pass@cluster/db?authSource=admin)",
-                                                    type="text",
-                                                    value="",
-                                                    style={"width": "100%"},
+                                                dbc.RadioItems(
+                                                    options=[
+                                                        {"label": "Use URI", "value": "uri"},
+                                                        {"label": "Use Credentials", "value": "credentials"},
+                                                    ],
+                                                    value="credentials",
+                                                    id="connection-mode-switch",
+                                                    inline=True,
                                                 ),
-                                                width=12,
+                                                md=12,
                                             ),
                                         ],
-                                        class_name="mb-2",
+                                        class_name="mb-3",
                                     ),
-                                    dbc.Row(
-                                        [
-                                            dbc.Col(dcc.Input(id="host-input", placeholder="Host (default: localhost)", type="text", value="", style={"width": "100%"}), md=6),
-                                            dbc.Col(dcc.Input(id="port-input", placeholder="Port (default: 27017)", type="text", value="", style={"width": "100%"}), md=6),
+                                    # URI mode fields
+                                    html.Div(
+                                        id="uri-mode-fields",
+                                        children=[
+                                            dbc.Row(
+                                                [
+                                                    dbc.Col(
+                                                        dcc.Input(
+                                                            id="uri-input",
+                                                            placeholder="MongoDB URI (e.g. mongodb+srv://user:pass@cluster/db?authSource=admin)",
+                                                            type="text",
+                                                            value="",
+                                                            style={"width": "100%"},
+                                                        ),
+                                                        width=12,
+                                                    ),
+                                                ],
+                                                class_name="mb-2",
+                                            ),
                                         ],
-                                        class_name="mb-2",
+                                        style={"display": "none"},
                                     ),
-                                    dbc.Row(
-                                        [
-                                            dbc.Col(dcc.Input(id="username-input", placeholder="Username (optional)", type="text", value="", style={"width": "100%"}), md=6),
-                                            dbc.Col(dcc.Input(id="password-input", placeholder="Password (optional)", type="password", value="", style={"width": "100%"}), md=6),
+                                    # Credentials mode fields
+                                    html.Div(
+                                        id="credentials-mode-fields",
+                                        children=[
+                                            dbc.Row(
+                                                [
+                                                    dbc.Col(dcc.Input(id="host-input", placeholder="Host (default: localhost)", type="text", value="", style={"width": "100%"}), md=6),
+                                                    dbc.Col(dcc.Input(id="port-input", placeholder="Port (default: 27017)", type="text", value="", style={"width": "100%"}), md=6),
+                                                ],
+                                                class_name="mb-2",
+                                            ),
+                                            dbc.Row(
+                                                [
+                                                    dbc.Col(dcc.Input(id="username-input", placeholder="Username (optional)", type="text", value="", style={"width": "100%"}), md=6),
+                                                    dbc.Col(dcc.Input(id="password-input", placeholder="Password (optional)", type="password", value="", style={"width": "100%"}), md=6),
+                                                ],
+                                                class_name="mb-2",
+                                            ),
+                                            dbc.Row(
+                                                [
+                                                    dbc.Col(dcc.Input(id="authsource-input", placeholder="Auth source (default: database name)", type="text", value="", style={"width": "100%"}), md=12),
+                                                ],
+                                                class_name="mb-2",
+                                            ),
                                         ],
-                                        class_name="mb-2",
                                     ),
-                        dbc.Row(
-                            [
-                                dbc.Col(dcc.Input(id="authsource-input", placeholder="Auth source (default: database name)", type="text", value="", style={"width": "100%"}), md=12),
-                            ],
-                            class_name="mb-2",
-                        ),
                                     dbc.Row(
                                         [
                                             dbc.Col(
@@ -764,6 +794,7 @@ def pygwalker_route():
     State("creds-store", "data"),
     State("db-history", "data"),
     State("config-keys-store", "data"),
+    State("connection-mode-switch", "value"),
     prevent_initial_call=False,
 )
 def on_connect_click(
@@ -779,6 +810,7 @@ def on_connect_click(
     saved_creds,
     db_history,
     existing_config_store,
+    connection_mode: str,
 ):
     ctx = dash.callback_context  # type: ignore
     triggered = ctx.triggered[0]["prop_id"].split(".")[0] if ctx.triggered else None
@@ -805,7 +837,12 @@ def on_connect_click(
         else:
             resolved_db_name = DEFAULT_DB_NAME
 
-    # Resolve credentials
+    # Determine connection mode
+    resolved_mode = connection_mode or "credentials"
+    if auto_triggered and saved_creds and isinstance(saved_creds, dict):
+        resolved_mode = saved_creds.get("connection_mode", resolved_mode)
+
+    # Resolve credentials based on mode
     if auto_triggered and saved_creds:
         uri_from_user = (saved_creds or {}).get("uri") or uri_value
         host = (saved_creds or {}).get("host") or host_value
@@ -820,6 +857,18 @@ def on_connect_click(
         username = username_value
         password = password_value
         auth_source = auth_source_value
+
+    # Apply connection mode: only use URI when in URI mode, only use credentials when in credentials mode
+    if resolved_mode == "uri":
+        # In URI mode, ignore individual credentials
+        host = None
+        port = None
+        username = None
+        password = None
+        auth_source = None
+    else:
+        # In credentials mode, ignore URI
+        uri_from_user = None
 
     # Build URI and attempt connection
     uri = build_mongodb_uri(
@@ -2004,6 +2053,7 @@ def toggle_all_config_keys(n_clicks, store):
     State("authsource-input", "value"),
     State("db-name-input", "value"),
     State("save-options", "value"),
+    State("connection-mode-switch", "value"),
     prevent_initial_call=True,
 )
 def update_saved_credentials(
@@ -2017,6 +2067,7 @@ def update_saved_credentials(
     auth_source_value,
     db_name_value,
     save_options,
+    connection_mode,
 ):
     # Determine which button triggered
     ctx = dash.callback_context  # type: ignore
@@ -2038,6 +2089,7 @@ def update_saved_credentials(
         "port": (port_value or ""),
         "username": (username_value or ""),
         "db_name": (db_name_value or ""),
+        "connection_mode": (connection_mode or "credentials"),
     }
     # Always store password if saving is enabled
     data["password"] = (password_value or "")
@@ -2340,5 +2392,32 @@ def set_db_name_from_history(db_history, creds_data, current_value):
         return db_history[0]
     return dash.no_update
 
+
+# --- Connection mode toggle (URI vs Credentials) ---
+@app.callback(
+    Output("uri-mode-fields", "style"),
+    Output("credentials-mode-fields", "style"),
+    Input("connection-mode-switch", "value"),
+)
+def toggle_connection_mode_fields(mode):
+    if mode == "uri":
+        return {}, {"display": "none"}
+    else:
+        return {"display": "none"}, {}
+
+
+@app.callback(
+    Output("connection-mode-switch", "value"),
+    Input("creds-store", "data"),
+    prevent_initial_call=False,
+)
+def restore_connection_mode(creds_data):
+    if not creds_data or not isinstance(creds_data, dict):
+        return "credentials"
+    saved_mode = creds_data.get("connection_mode", "credentials")
+    return saved_mode if saved_mode in ("uri", "credentials") else "credentials"
+
+
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "8050")), debug=True)
+    debug_mode = os.environ.get("DEBUG", "false").lower() in ("true", "1", "yes")
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "8050")), debug=debug_mode)

@@ -5,6 +5,7 @@ FROM python:3.11-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV PORT=8050
+ENV DEBUG=false
 
 # Set working directory
 WORKDIR /app
@@ -26,6 +27,7 @@ COPY . .
 # Expose the port the app runs on
 EXPOSE 8050
 
-# Run the application
-CMD ["python", "app.py"]
+# Run the application with Gunicorn (production WSGI server)
+# 4 workers, bind to all interfaces on PORT
+CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT} --workers 4 --threads 2 app:server"]
 
