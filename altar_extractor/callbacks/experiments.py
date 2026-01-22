@@ -9,7 +9,7 @@ import random
 import io
 import csv
 
-from ..services.data import build_table_from_runs
+from ..services.data import build_table_from_runs, format_value_for_table
 
 
 def register_experiments_callbacks(app):
@@ -108,10 +108,7 @@ def register_experiments_callbacks(app):
                         if val is None:
                             rows[idx][f"result:{key}"] = ""
                         else:
-                            try:
-                                rows[idx][f"result:{key}"] = json.dumps(val, ensure_ascii=False, default=str) if isinstance(val, (list, dict)) else val
-                            except Exception:
-                                rows[idx][f"result:{key}"] = str(val)
+                            rows[idx][f"result:{key}"] = format_value_for_table(val)
 
         return columns, rows
 

@@ -34,11 +34,25 @@ def collect_metric_ids_from_runs(runs: List[Dict]) -> List[str]:
 
 def format_value_for_table(value, max_length: int = 80):
     """
-    Format a value for display in the table.
-    Converts lists and dicts to JSON string with preview if too long.
+    Format a value for display in the Dash DataTable.
+    DataTable only accepts strings, numbers, booleans - NOT lists or dicts directly.
+    
+    Examples:
+        [1, 2, 3] -> "[1, 2, 3]"
+        {"a": 1} -> '{"a": 1}'
+        Long values are truncated with "..."
     """
     import json
     
+    # None -> empty string
+    if value is None:
+        return ""
+    
+    # Basic types that DataTable can handle
+    if isinstance(value, (bool, int, float, str)):
+        return value
+    
+    # Lists and dicts must be converted to string
     if isinstance(value, (list, dict)):
         try:
             full_str = json.dumps(value, ensure_ascii=False, default=str)
@@ -50,7 +64,8 @@ def format_value_for_table(value, max_length: int = 80):
             return full_str[:max_length - 3] + "..."
         return full_str
     
-    return value
+    # Any other type -> convert to string
+    return str(value)
 
 
 def build_table_from_runs(runs: List[Dict], selected_keys: List[str]) -> Tuple[List[Dict], List[Dict]]:
