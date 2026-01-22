@@ -6,9 +6,16 @@ window.dash_clientside = Object.assign({}, window.dash_clientside, {
         return window.dash_clientside.no_update;
       }
       try {
-        window.open(url, "_blank");
+        // Try to open in new tab
+        var newWindow = window.open(url, "_blank");
+        // If blocked by popup blocker, navigate in same tab
+        if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
+          console.log("Popup blocked, navigating in same tab");
+          window.location.href = url;
+        }
       } catch (e) {
-        // swallow errors; user might have blocked popups
+        // Fallback: navigate in same tab
+        window.location.href = url;
       }
       return "";
     }

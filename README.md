@@ -47,7 +47,7 @@ A Dash web app to browse Sacred experiments stored in MongoDB. Features a clean 
 ## Run the app
 
 ```bash
-python app.py
+python main.py
 ```
 
 Open your browser to http://127.0.0.1:8050/
@@ -117,6 +117,10 @@ See [AltarDocker/DEPLOY.md](../AltarDocker/DEPLOY.md) for full deployment instru
    docker-compose down
    ```
 
+> **⚠️ Docker Networking Note:**  
+> If AltarExtractor and MongoDB are running in the **same Docker network** (e.g., via docker-compose), use the MongoDB **container/service name** (e.g., `mongo`) instead of `localhost` as the host.  
+> `localhost` inside a container refers to the container itself, not the host machine or other containers.
+
 ### Using Docker directly
 
 1. Build the image:
@@ -161,7 +165,7 @@ environment:
 
 ## Customization
 
-If your Sacred data uses a different structure than the standard `runs` collection with `experiment.name`, update the query logic in `app.py` (see `fetch_sacred_experiment_names` function).
+If your Sacred data uses a different structure than the standard `runs` collection with `experiment.name`, update the query logic in `altar_extractor/services/mongo.py` (see `fetch_sacred_experiment_names` function).
 
 ---
 

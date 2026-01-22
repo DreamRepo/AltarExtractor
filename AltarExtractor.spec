@@ -1,7 +1,15 @@
 # -*- mode: python ; coding: utf-8 -*-
 import sys
 import os
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+import glob
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules, collect_dynamic_libs
+
+# Find Python's DLLs directory and add pyexpat
+python_dir = os.path.dirname(sys.executable)
+dlls_dir = os.path.join(python_dir, 'DLLs')
+
+# Also check Anaconda's DLLs directory (common when using venv from Anaconda)
+anaconda_dlls = r'C:\ProgramData\anaconda3\DLLs'
 
 # Collect dash and related packages data files
 datas = []
@@ -25,6 +33,24 @@ datas += [('assets', 'assets')]
 
 # Add altar_extractor package
 datas += [('altar_extractor', 'altar_extractor')]
+
+# Collect binaries (for DLLs like pyexpat)
+binaries = []
+
+# Add pyexpat and other Python DLLs explicitly from multiple locations
+dll_patterns = ['pyexpat*.pyd', 'pyexpat*.dll', '_elementtree*.pyd', 'libexpat*.dll']
+dll_search_paths = [dlls_dir, python_dir, anaconda_dlls]
+
+for search_path in dll_search_paths:
+    if os.path.exists(search_path):
+        for dll_pattern in dll_patterns:
+            for dll_path in glob.glob(os.path.join(search_path, dll_pattern)):
+                binaries.append((dll_path, '.'))
+
+try:
+    binaries += collect_dynamic_libs('lxml')
+except Exception:
+    pass
 
 # Collect hidden imports
 hiddenimports = [
@@ -61,17 +87,30 @@ hiddenimports = [
     'altar_extractor.services.mongo',
     'altar_extractor.state',
     'altar_extractor.state.cache',
+    # XML and encoding modules (fix pyexpat DLL error)
+    'xml',
+    'xml.parsers',
+    'xml.parsers.expat',
+    'pyexpat',
+    'encodings',
+    'codecs',
+    'pkg_resources',
+    'packaging',
+    'packaging.version',
+    'packaging.specifiers',
+    'packaging.requirements',
 ]
 
 # Collect all dash submodules
 hiddenimports += collect_submodules('dash')
 hiddenimports += collect_submodules('dash_bootstrap_components')
 hiddenimports += collect_submodules('plotly')
+hiddenimports += collect_submodules('pkg_resources')
 
 a = Analysis(
     ['main.py'],
     pathex=[],
-    binaries=[],
+    binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
