@@ -32,6 +32,27 @@ def collect_metric_ids_from_runs(runs: List[Dict]) -> List[str]:
     return sorted(ids)
 
 
+def format_value_for_table(value, max_length: int = 80):
+    """
+    Format a value for display in the table.
+    Converts lists and dicts to JSON string with preview if too long.
+    """
+    import json
+    
+    if isinstance(value, (list, dict)):
+        try:
+            full_str = json.dumps(value, ensure_ascii=False, default=str)
+        except Exception:
+            full_str = str(value)
+        
+        # Truncate if too long
+        if len(full_str) > max_length:
+            return full_str[:max_length - 3] + "..."
+        return full_str
+    
+    return value
+
+
 def build_table_from_runs(runs: List[Dict], selected_keys: List[str]) -> Tuple[List[Dict], List[Dict]]:
     """
     Build DataTable columns and rows based on selected configuration keys.
@@ -49,7 +70,8 @@ def build_table_from_runs(runs: List[Dict], selected_keys: List[str]) -> Tuple[L
         if not isinstance(cfg, dict):
             cfg = {}
         for key in selected_keys:
-            row[key] = cfg.get(key)
+            value = cfg.get(key)
+            row[key] = format_value_for_table(value)
         rows.append(row)
     return columns, rows
 

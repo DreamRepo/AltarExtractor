@@ -132,24 +132,75 @@ def register_experiments_callbacks(app):
         State("download-exp-filename", "value"),
         State("experiments-table", "columns"),
         State("experiments-table", "data"),
+        State("runs-cache", "data"),
+        State("config-keys-store", "data"),
+        State("filters-store", "data"),
+        State("results-select", "value"),
         prevent_initial_call=True,
     )
-    def download_exp_csv(n_clicks, filename, columns, data_rows):
+    def download_exp_csv(n_clicks, filename, columns, data_rows, runs_cache, config_store, filters_store, selected_result_keys):
         if not n_clicks:
             return no_update
-        rows = data_rows or []
-        cols = columns or []
-        if len(rows) == 0 or len(cols) == 0:
+        
+        runs = runs_cache or []
+        selected = (config_store or {}).get("selected", [])
+        active_filters = filters_store or {}
+        
+        if len(runs) == 0 or len(selected) == 0:
             return no_update
 
-        col_ids = [c.get("id") for c in cols if isinstance(c, dict) and c.get("id")]
-        col_names = [c.get("name", c.get("id")) for c in cols]
+        # Apply filters (same logic as refresh_table)
+        def row_passes_filters(run_cfg: Dict) -> bool:
+            for key in selected:
+                f = active_filters.get(key) if isinstance(active_filters, dict) else None
+                if not f:
+                    continue
+                value = run_cfg.get(key, None) if isinstance(run_cfg, dict) else None
+
+                mode = f.get("mode") if isinstance(f, dict) else None
+                if mode in ("true", "false"):
+                    if not isinstance(value, bool):
+                        return False
+                    desired = (mode == "true")
+                    if value != desired:
+                        return False
+
+                has_min = "min" in f and f.get("min") is not None
+                has_max = "max" in f and f.get("max") is not None
+                if has_min or has_max:
+                    if not isinstance(value, (int, float)) or isinstance(value, bool):
+                        return False
+                    if has_min and value < f.get("min"):
+                        return False
+                    if has_max and value > f.get("max"):
+                        return False
+
+                values = f.get("values") if isinstance(f, dict) else None
+                if isinstance(values, list) and len(values) > 0:
+                    if not isinstance(value, str):
+                        return False
+                    if value not in values:
+                        return False
+            return True
+
+        filtered_runs = [run for run in runs if row_passes_filters(run.get("config", {}) or {})]
+        
+        if len(filtered_runs) == 0:
+            return no_update
+
+        # Build column headers
+        col_names = ["run_id", "Experiment"] + selected
+        
+        # Add result keys if any
+        result_keys = [k for k in (selected_result_keys or []) if isinstance(k, str) and k.strip()]
+        col_names.extend(result_keys)
 
         buf = io.StringIO()
         writer = csv.writer(buf)
         writer.writerow(col_names)
 
         def stringify(v):
+            """Convert value to string for CSV - full value, no truncation"""
             if isinstance(v, (list, dict, tuple)):
                 try:
                     return json.dumps(v, ensure_ascii=False, default=str)
@@ -157,8 +208,20 @@ def register_experiments_callbacks(app):
                     return str(v)
             return v
 
-        for row in rows:
-            writer.writerow([stringify(row.get(cid, "")) for cid in col_ids])
+        for run in filtered_runs:
+            cfg = run.get("config", {}) or {}
+            row_data = [run.get("run_id", ""), run.get("experiment", "")]
+            
+            # Add config values (full, not truncated)
+            for key in selected:
+                row_data.append(stringify(cfg.get(key, "")))
+            
+            # Add result values
+            result = run.get("result", {}) or {}
+            for key in result_keys:
+                row_data.append(stringify(result.get(key, "")))
+            
+            writer.writerow(row_data)
 
         csv_str = buf.getvalue()
         buf.close()
