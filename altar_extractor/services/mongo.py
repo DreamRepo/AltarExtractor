@@ -3,8 +3,76 @@ MongoDB service functions for AltarExtractor.
 """
 
 from typing import Dict, List, Optional
+from urllib.parse import quote_plus
 from bson import ObjectId
 import pymongo
+
+from ..config import MONGO_HOST, MONGO_PORT, MONGO_USERNAME, MONGO_PASSWORD, MONGO_AUTH_SOURCE, ALLOWED_DATABASES
+
+
+def get_mongo_client() -> pymongo.MongoClient:
+    """
+    Create a MongoDB client using credentials from .env file.
+    Uses MONGO_AUTH_SOURCE for authentication.
+    """
+    if MONGO_USERNAME and MONGO_PASSWORD:
+        auth_source = MONGO_AUTH_SOURCE if MONGO_AUTH_SOURCE != "auto" else "admin"
+        # URL-encode username and password to handle special characters
+        encoded_user = quote_plus(MONGO_USERNAME)
+        encoded_pass = quote_plus(MONGO_PASSWORD)
+        uri = f"mongodb://{encoded_user}:{encoded_pass}@{MONGO_HOST}:{MONGO_PORT}/?authSource={auth_source}"
+    else:
+        uri = f"mongodb://{MONGO_HOST}:{MONGO_PORT}/"
+    return pymongo.MongoClient(uri, serverSelectionTimeoutMS=5000)
+
+
+def get_mongo_client_for_db(database_name: str) -> pymongo.MongoClient:
+    """
+    Create a MongoDB client for a specific database.
+    If MONGO_AUTH_SOURCE is 'auto', uses the database name as authSource.
+    Otherwise uses the configured MONGO_AUTH_SOURCE.
+    """
+    if MONGO_USERNAME and MONGO_PASSWORD:
+        auth_source = database_name if MONGO_AUTH_SOURCE == "auto" else MONGO_AUTH_SOURCE
+        # URL-encode username and password to handle special characters
+        encoded_user = quote_plus(MONGO_USERNAME)
+        encoded_pass = quote_plus(MONGO_PASSWORD)
+        uri = f"mongodb://{encoded_user}:{encoded_pass}@{MONGO_HOST}:{MONGO_PORT}/?authSource={auth_source}"
+        print(f"[DEBUG] get_mongo_client_for_db: user={MONGO_USERNAME}, host={MONGO_HOST}:{MONGO_PORT}, authSource={auth_source}", flush=True)
+    else:
+        uri = f"mongodb://{MONGO_HOST}:{MONGO_PORT}/"
+        print(f"[DEBUG] get_mongo_client_for_db: no auth, host={MONGO_HOST}:{MONGO_PORT}", flush=True)
+    return pymongo.MongoClient(uri, serverSelectionTimeoutMS=5000)
+
+
+def list_available_databases() -> List[str]:
+    """
+    List all available databases from MongoDB.
+    If ALLOWED_DATABASES is set in .env, return those directly (no connection needed).
+    Otherwise try to connect and list databases.
+    Excludes system databases (admin, local, config).
+    """
+    # If ALLOWED_DATABASES is explicitly set, return those without connecting
+    # This is necessary when users are authenticated per-database
+    if ALLOWED_DATABASES:
+        print(f"[DEBUG] Using ALLOWED_DATABASES: {ALLOWED_DATABASES}", flush=True)
+        return sorted(ALLOWED_DATABASES)
+    
+    system_dbs = {"admin", "local", "config"}
+    
+    try:
+        client = get_mongo_client()
+        client.admin.command("ping")
+        all_dbs = client.list_database_names()
+        client.close()
+        
+        # Filter out system databases
+        user_dbs = [db for db in all_dbs if db not in system_dbs]
+        print(f"[DEBUG] Found databases: {user_dbs}")
+        return sorted(user_dbs)
+    except Exception as e:
+        print(f"[DEBUG] Error listing databases: {e}")
+        return []
 
 
 def build_mongodb_uri(

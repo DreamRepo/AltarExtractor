@@ -5,3 +5,4 @@ dash-bootstrap-components
 pandas
 pygwalker
 gunicorn
+python-dotenv

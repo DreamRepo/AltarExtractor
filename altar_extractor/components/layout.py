@@ -12,9 +12,7 @@ def build_layout():
     return dbc.Container(
         [
             # Stores
-            dcc.Store(id="creds-store", storage_type="local"),
             dcc.Store(id="ui-store", storage_type="local"),
-            dcc.Store(id="db-history", storage_type="local"),
             dcc.Store(id="runs-cache", storage_type="memory"),
             dcc.Store(id="config-keys-store", storage_type="local"),
             dcc.Store(id="filters-store", storage_type="local"),
@@ -27,14 +25,15 @@ def build_layout():
             dcc.Store(id="metrics-show-keys-store", storage_type="local"),
             dcc.Store(id="metrics-layout-mode-store", storage_type="local"),
             dcc.Store(id="results-store", storage_type="memory"),
-            dcc.Interval(id="init-tick", interval=0, n_intervals=0, max_intervals=1),
+            dcc.Store(id="available-dbs-store", storage_type="memory"),
+            dcc.Store(id="current-db-store", storage_type="memory"),  # Currently connected database
+            dcc.Interval(id="init-tick", interval=500, n_intervals=0, max_intervals=1),
 
             # Navbar
             dbc.Navbar(
                 dbc.Container(
                     [
                         dbc.NavbarBrand("AltarExtractor", class_name="mb-0 h4 text-dark"),
-                        dbc.Button("Database credentials", id="toggle-connection", color="link", class_name="mb-0 h5 p-0"),
                     ]
                 ),
                 color="light",
@@ -42,131 +41,19 @@ def build_layout():
                 class_name="mb-3",
             ),
 
-            # Connection credentials panel
-            dbc.Collapse(
-                id="connection-collapse",
-                is_open=True,
-                children=dbc.Row(
-                    [
-                        dbc.Col(
-                            dbc.Card(
-                                dbc.CardBody(
-                                    [
-                                        html.P("Enter your MongoDB credentials or a MongoDB URI."),
-                                        # Connection mode switch
-                                        dbc.Row(
-                                            [
-                                                dbc.Col(
-                                                    dbc.RadioItems(
-                                                        options=[
-                                                            {"label": "Use URI", "value": "uri"},
-                                                            {"label": "Use Credentials", "value": "credentials"},
-                                                        ],
-                                                        value="credentials",
-                                                        id="connection-mode-switch",
-                                                        inline=True,
-                                                    ),
-                                                    md=12,
-                                                ),
-                                            ],
-                                            class_name="mb-3",
-                                        ),
-                                        # URI mode fields
-                                        html.Div(
-                                            id="uri-mode-fields",
-                                            children=[
-                                                dbc.Row(
-                                                    [
-                                                        dbc.Col(
-                                                            dcc.Input(
-                                                                id="uri-input",
-                                                                placeholder="MongoDB URI (e.g. mongodb+srv://user:pass@cluster/db?authSource=admin)",
-                                                                type="text",
-                                                                value="",
-                                                                style={"width": "100%"},
-                                                            ),
-                                                            width=12,
-                                                        ),
-                                                    ],
-                                                    class_name="mb-2",
-                                                ),
-                                            ],
-                                            style={"display": "none"},
-                                        ),
-                                        # Credentials mode fields
-                                        html.Div(
-                                            id="credentials-mode-fields",
-                                            children=[
-                                                dbc.Row(
-                                                    [
-                                                        dbc.Col(dcc.Input(id="host-input", placeholder="Host (default: localhost)", type="text", value="", style={"width": "100%"}), md=6),
-                                                        dbc.Col(dcc.Input(id="port-input", placeholder="Port (default: 27017)", type="text", value="", style={"width": "100%"}), md=6),
-                                                    ],
-                                                    class_name="mb-2",
-                                                ),
-                                                dbc.Row(
-                                                    [
-                                                        dbc.Col(dcc.Input(id="username-input", placeholder="Username (optional)", type="text", value="", style={"width": "100%"}), md=6),
-                                                        dbc.Col(dcc.Input(id="password-input", placeholder="Password (optional)", type="password", value="", style={"width": "100%"}), md=6),
-                                                    ],
-                                                    class_name="mb-2",
-                                                ),
-                                                dbc.Row(
-                                                    [
-                                                        dbc.Col(dcc.Input(id="authsource-input", placeholder="Auth source (default: database name)", type="text", value="", style={"width": "100%"}), md=12),
-                                                    ],
-                                                    class_name="mb-2",
-                                                ),
-                                            ],
-                                        ),
-                                        dbc.Row(
-                                            [
-                                                dbc.Col(
-                                                    dbc.Checklist(
-                                                        options=[
-                                                            {"label": "Save credentials", "value": "save"},
-                                                        ],
-                                                        value=[],
-                                                        id="save-options",
-                                                        switch=True,
-                                                    ),
-                                                    md=12,
-                                                ),
-                                            ],
-                                            class_name="mb-2",
-                                        ),
-                                        dbc.Row(
-                                            [
-                                                dbc.Col(dbc.Button("Clear saved", id="clear-saved-button", color="link", n_clicks=0), width="auto"),
-                                            ],
-                                            class_name="g-2 align-items-center",
-                                        ),
-                                    ]
-                                ),
-                                class_name="mb-3",
-                            ),
-                            md=6,
-                        ),
-                        dbc.Col(
-                            dbc.Card(
-                                dbc.CardBody([]),
-                                class_name="mb-3",
-                            ),
-                            md=6,
-                        ),
-                    ],
-                    class_name="g-2",
-                ),
-            ),
-
-            # Database name + Connect button row
+            # Database selector row
             dbc.Row(
                 [
                     dbc.Col(
                         [
-                            dbc.Label("Database"),
-                            dbc.Input(id="db-name-input", placeholder=f"Database name (default: {DEFAULT_DB_NAME})", type="text", list="db-name-list"),
-                            html.Datalist(id="db-name-list"),
+                            dbc.Label("Select Database"),
+                            dcc.Dropdown(
+                                id="db-selector",
+                                options=[],
+                                value=None,
+                                placeholder="Select a database...",
+                                clearable=False,
+                            ),
                         ],
                         md=4,
                     ),
@@ -180,9 +67,16 @@ def build_layout():
                     dbc.Col(
                         [
                             dbc.Label(" "),
+                            dbc.Button("Refresh databases", id="refresh-dbs-button", color="secondary", outline=True, n_clicks=0, class_name="d-block"),
+                        ],
+                        md=2,
+                    ),
+                    dbc.Col(
+                        [
+                            dbc.Label(" "),
                             dbc.Alert(id="status-alert", is_open=False, color="light", class_name="mb-0"),
                         ],
-                        md=6,
+                        md=4,
                     ),
                 ],
                 class_name="g-2 align-items-end mb-3",

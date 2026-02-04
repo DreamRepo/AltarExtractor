@@ -9,6 +9,9 @@ import json
 import io
 import csv
 
+from ..services.mongo import get_mongo_client_for_db, fetch_metrics_values_map
+from ..services.data import collect_metric_ids_from_runs
+
 
 def register_metrics_callbacks(app):
     """Register metrics table callbacks."""
@@ -16,21 +19,64 @@ def register_metrics_callbacks(app):
     @app.callback(
         Output("metrics-steps-table", "columns"),
         Output("metrics-steps-table", "data"),
+        Output("metrics-values-store", "data", allow_duplicate=True),  # Cache the loaded values
         Input("runs-cache", "data"),
         Input("config-keys-store", "data"),
         Input("filters-store", "data"),
         Input("metrics-select", "value"),
-        Input("metrics-values-store", "data"),
         Input("metrics-show-keys-switch", "value"),
         Input("metrics-layout-mode", "value"),
+        State("metrics-values-store", "data"),
+        State("current-db-store", "data"),
+        prevent_initial_call=True,
     )
-    def refresh_metrics_steps_table(runs_cache, config_store, filters_store, selected_metrics_names, metrics_values_map, show_keys_switch, layout_mode):
+    def refresh_metrics_steps_table(runs_cache, config_store, filters_store, selected_metrics_names, show_keys_switch, layout_mode, cached_metrics_values, current_db):
         runs = runs_cache or []
         selected = (config_store or {}).get("selected", [])
-        metrics_values_map = metrics_values_map or {}
+        metrics_values_map = cached_metrics_values or {}
         selected_metrics = [m for m in (selected_metrics_names or []) if isinstance(m, str) and m.strip()]
         show_selected_keys = bool(show_keys_switch and "show" in show_keys_switch)
         steps_as_columns = (layout_mode == "cols")
+
+        # If no metrics selected or no database, return empty
+        if not selected_metrics or not current_db:
+            return [], [], metrics_values_map
+
+        # Check if we need to load metric values for selected metrics
+        # Collect metric IDs for selected metrics only
+        needed_metric_ids = set()
+        for run in runs:
+            run_metrics = run.get("metrics", None)
+            for mname in selected_metrics:
+                mid = None
+                if isinstance(run_metrics, dict):
+                    v = run_metrics.get(mname, None)
+                    if isinstance(v, dict) and v.get("id") is not None:
+                        mid = str(v.get("id"))
+                    elif isinstance(v, (str, ObjectId)):
+                        mid = str(v)
+                elif isinstance(run_metrics, list):
+                    for item in run_metrics:
+                        if isinstance(item, dict) and item.get("name") == mname:
+                            mid = item.get("id") or item.get("_id")
+                            if mid is not None:
+                                mid = str(mid)
+                            break
+                if mid and mid not in metrics_values_map:
+                    needed_metric_ids.add(mid)
+
+        # Load missing metric values
+        if needed_metric_ids:
+            print(f"[METRICS] Loading {len(needed_metric_ids)} metric values on demand...", flush=True)
+            try:
+                client = get_mongo_client_for_db(current_db)
+                new_values = fetch_metrics_values_map(client, current_db, list(needed_metric_ids))
+                client.close()
+                # Merge with existing cache
+                metrics_values_map = {**metrics_values_map, **new_values}
+                print(f"[METRICS] Loaded {len(new_values)} metric values", flush=True)
+            except Exception as e:
+                print(f"[METRICS] Error loading metrics: {e}", flush=True)
 
         active_filters = filters_store or {}
 
@@ -114,7 +160,7 @@ def register_metrics_callbacks(app):
                 continue
             run_data.append({"base": base, "step_grid": step_grid, "metric_series": metric_series, "metric_steps": metric_steps})
 
-        sorted_steps = sorted(all_step_values)
+        sorted_steps = sorted([s for s in all_step_values if s is not None])
         rows: List[Dict] = []
 
         if steps_as_columns:
@@ -158,7 +204,7 @@ def register_metrics_callbacks(app):
                         row[f"metric:{mname}"] = series[idx] if idx < len(series) else ""
                     rows.append(row)
 
-        return columns, rows
+        return columns, rows, metrics_values_map
 
     @app.callback(
         Output("download-steps-modal", "is_open"),

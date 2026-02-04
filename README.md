@@ -1,16 +1,16 @@
 # AltarExtractor — Sacred Experiments Browser
 
-A Dash web app to browse Sacred experiments stored in MongoDB. Features a clean Bootstrap UI, saved credentials, config filtering, metrics visualization, and CSV export.
+A Dash web app to browse Sacred experiments stored in MongoDB. Features a clean Bootstrap UI, database selection, config filtering, metrics visualization, and CSV export.
 
 ## Features
 
-- Connect to any MongoDB instance with Sacred data
+- Connect to MongoDB using credentials from `.env` file
+- Select database from a dropdown (auto-detected from MongoDB)
 - Browse experiments by name
 - Filter runs by configuration keys (boolean, number, string filters)
 - View and select metrics for detailed per-step analysis
 - Export data as CSV
 - Open datasets in Pygwalker for interactive exploration
-- Credentials saved in browser local storage
 
 ---
 
@@ -42,6 +42,23 @@ A Dash web app to browse Sacred experiments stored in MongoDB. Features a clean 
    pip install -r requirements.txt
    ```
 
+3. Configure MongoDB connection:
+   
+   Copy `env.example` to `.env` and fill in your MongoDB credentials:
+   ```bash
+   cp env.example .env
+   ```
+   
+   Edit `.env`:
+   ```env
+   MONGO_HOST=localhost
+   MONGO_PORT=27017
+   MONGO_USERNAME=your_username
+   MONGO_PASSWORD=your_password
+   # Optional: restrict to specific databases
+   ALLOWED_DATABASES=sacred,experiments
+   ```
+
 ---
 
 ## Run the app
@@ -56,18 +73,18 @@ Open your browser to http://127.0.0.1:8050/
 
 ## Usage
 
-### Connecting to MongoDB
+### Selecting a Database
 
-You can either:
-- Paste a full MongoDB URI (e.g., `mongodb+srv://user:pass@cluster/yourdb?authSource=admin`), or
-- Fill in individual fields: host, port, username, password, and auth source
+1. The app automatically loads available databases from MongoDB on startup
+2. Select a database from the dropdown
+3. Click **Connect** to load the experiments
+4. Use **Refresh databases** to reload the database list
 
-Specify the database name (defaults to `sacred`) and click **Connect**.
+> **Note:** The authSource for MongoDB authentication is automatically set to the selected database name.
 
 ### UI Features
 
-- **Database credentials panel**: Toggle visibility with the "Database credentials" button
-- **Save credentials**: Check to persist connection settings in browser localStorage
+- **Database selector**: Choose from available databases detected in MongoDB
 - **Config keys selection**: Choose which configuration keys to display and filter by
 - **Experiments table**: View runs with selected config columns, sort and paginate
 - **Metrics section**: Select metrics to view per-step data
@@ -90,12 +107,15 @@ Access at http://localhost:8050
 
 ### Connect to MongoDB in Docker
 
-When running inside AltarDocker, use these connection settings:
-- **Host**: `mongo` (Docker service name)
-- **Port**: `27017`
-- **Username**: your `MONGO_ROOT_USER`
-- **Password**: your `MONGO_ROOT_PASSWORD`
-- **Auth source**: `admin`
+When running inside AltarDocker, configure your `.env` file with:
+```env
+MONGO_HOST=mongo
+MONGO_PORT=27017
+MONGO_USERNAME=your_MONGO_ROOT_USER
+MONGO_PASSWORD=your_MONGO_ROOT_PASSWORD
+```
+
+> **Note:** The authSource is automatically set to the selected database name.
 
 See [AltarDocker/DEPLOY.md](../AltarDocker/DEPLOY.md) for full deployment instructions.
 
@@ -145,20 +165,34 @@ See [AltarDocker/DEPLOY.md](../AltarDocker/DEPLOY.md) for full deployment instru
 
 ## Environment Variables
 
-| Variable         | Description                      | Default  |
-|------------------|----------------------------------|----------|
-| `PORT`           | Port the app listens on          | `8050`   |
-| `SACRED_DB_NAME` | Default database name            | `sacred` |
+| Variable            | Description                                      | Default     |
+|---------------------|--------------------------------------------------|-------------|
+| `MONGO_HOST`        | MongoDB host                                     | `localhost` |
+| `MONGO_PORT`        | MongoDB port                                     | `27017`     |
+| `MONGO_USERNAME`    | MongoDB username (leave empty for no auth)      | *(empty)*   |
+| `MONGO_PASSWORD`    | MongoDB password                                 | *(empty)*   |
+| `ALLOWED_DATABASES` | Comma-separated list of allowed databases        | *(all)*     |
+| `SACRED_DB_NAME`    | Default database to select                       | `sacred`    |
+| `PORT`              | Port the app listens on                          | `8050`      |
+| `DEBUG`             | Enable debug mode                                | `false`     |
 
-Example:
+Example with Docker:
 ```bash
-docker run -d -p 8050:8050 -e SACRED_DB_NAME=my_db altar-extractor
+docker run -d -p 8050:8050 \
+  -e MONGO_HOST=mongo \
+  -e MONGO_USERNAME=root \
+  -e MONGO_PASSWORD=secret \
+  altar-extractor
 ```
 
 Or in `docker-compose.yml`:
 ```yaml
 environment:
-  - SACRED_DB_NAME=my_sacred_db
+  - MONGO_HOST=mongo
+  - MONGO_PORT=27017
+  - MONGO_USERNAME=root
+  - MONGO_PASSWORD=secret
+  - ALLOWED_DATABASES=sacred,experiments
 ```
 
 ---
