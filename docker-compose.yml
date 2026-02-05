@@ -12,6 +12,7 @@ services:
     environment:
       - PORT=8050
       - DEBUG=false
+      - GUNICORN_WORKERS=4  # Adjust: 2 * CPU cores + 1
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8050/"]

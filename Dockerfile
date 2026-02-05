@@ -28,6 +28,7 @@ COPY . .
 EXPOSE 8050
 
 # Run the application with Gunicorn (production WSGI server)
-# 4 workers, bind to all interfaces on PORT
-CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT} --workers 4 --threads 2 main:server"]
+# Workers = 2 * CPU cores + 1 (adjust GUNICORN_WORKERS env var as needed)
+# timeout increased to 120s for slow MongoDB queries
+CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT} --workers ${GUNICORN_WORKERS:-4} --threads 2 --timeout 120 main:server"]
 
