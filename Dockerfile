@@ -13,6 +13,7 @@ WORKDIR /app
 # Install system dependencies (needed for some Python packages)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
@@ -28,7 +29,7 @@ COPY . .
 EXPOSE 8050
 
 # Run the application with Gunicorn (production WSGI server)
-# Workers = 2 * CPU cores + 1 (adjust GUNICORN_WORKERS env var as needed)
-# timeout increased to 120s for slow MongoDB queries
-CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT} --workers ${GUNICORN_WORKERS:-4} --threads 2 --timeout 120 main:server"]
+# 4 workers, bind to all interfaces on PORT
+#CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT} --workers ${GUNICORN_WORKERS:-4} --threads 2 --timeout 120 main:server"]
+CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT} --workers 1 --threads 8 --timeout 120 --keep-alive 5 main:server"]
 
