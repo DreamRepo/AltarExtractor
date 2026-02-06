@@ -159,7 +159,7 @@ def fetch_runs_docs(client: pymongo.MongoClient, database_name: str, limit: int 
     ).limit(limit)
     runs: List[Dict] = []
     for doc in cursor:
-        run_id = str(doc.get("_id"))
+        run_id = doc.get("_id")  # Keep original type (int or ObjectId)
         exp_name = None
         exp = doc.get("experiment")
         if isinstance(exp, dict):
@@ -207,6 +207,7 @@ def fetch_metrics_list(client: pymongo.MongoClient, database_name: str, limit: i
 def fetch_metrics_values_map(client: pymongo.MongoClient, database_name: str, id_strs: List[str]) -> Dict[str, Dict]:
     """
     Fetch metric values and steps for a list of metric IDs.
+    DEPRECATED: Use fetch_metrics_by_run_and_name instead.
     """
     if not id_strs:
         return {}
@@ -222,10 +223,38 @@ def fetch_metrics_values_map(client: pymongo.MongoClient, database_name: str, id
     if not object_ids:
         return {}
     values_by_id: Dict[str, Dict] = {}
-    for doc in db["metrics"].find({"_id": {"$in": object_ids}}, {"values": 1, "steps": 1}):
+    cursor = db["metrics"].find({"_id": {"$in": object_ids}}, {"values": 1, "steps": 1})
+    for doc in cursor:
         values_by_id[str(doc.get("_id"))] = {
             "values": doc.get("values", []),
             "steps": doc.get("steps", []),
         }
     return values_by_id
+
+
+def fetch_metrics_by_run_and_name(client: pymongo.MongoClient, database_name: str, queries: List[tuple]) -> Dict[str, Dict]:
+    """
+    Fetch metric values and steps by (run_id, metric_name) pairs.
+    Returns a dict keyed by "run_id:metric_name".
+    """
+    if not queries:
+        return {}
+    db = client[database_name]
+    if "metrics" not in db.list_collection_names():
+        print(f"[DEBUG] 'metrics' collection not found!", flush=True)
+        return {}
+    
+    # Build $or query for all (run_id, name) pairs
+    or_conditions = [{"run_id": run_id, "name": name} for run_id, name in queries]
+    
+    values_map: Dict[str, Dict] = {}
+    cursor = db["metrics"].find({"$or": or_conditions}, {"run_id": 1, "name": 1, "values": 1, "steps": 1})
+    for doc in cursor:
+        key = f"{doc.get('run_id')}:{doc.get('name')}"
+        values_map[key] = {
+            "values": doc.get("values", []),
+            "steps": doc.get("steps", []),
+        }
+    print(f"[DEBUG] fetch_metrics_by_run_and_name: found {len(values_map)} metrics", flush=True)
+    return values_map
 

@@ -4,13 +4,11 @@ Metrics table callbacks for AltarExtractor.
 
 from typing import Dict, List
 from dash import dcc, Input, Output, State, no_update
-from bson import ObjectId
 import json
 import io
 import csv
 
-from ..services.mongo import get_mongo_client_for_db, fetch_metrics_values_map
-from ..services.data import collect_metric_ids_from_runs
+from ..services.mongo import get_mongo_client_for_db, fetch_metrics_by_run_and_name
 
 
 def register_metrics_callbacks(app):
@@ -42,35 +40,21 @@ def register_metrics_callbacks(app):
         if not selected_metrics or not current_db:
             return [], [], metrics_values_map
 
-        # Check if we need to load metric values for selected metrics
-        # Collect metric IDs for selected metrics only
-        needed_metric_ids = set()
+        # Collect (run_id, metric_name) pairs for metrics we need to load
+        needed_queries = []
         for run in runs:
-            run_metrics = run.get("metrics", None)
+            run_id = run.get("run_id", "")
             for mname in selected_metrics:
-                mid = None
-                if isinstance(run_metrics, dict):
-                    v = run_metrics.get(mname, None)
-                    if isinstance(v, dict) and v.get("id") is not None:
-                        mid = str(v.get("id"))
-                    elif isinstance(v, (str, ObjectId)):
-                        mid = str(v)
-                elif isinstance(run_metrics, list):
-                    for item in run_metrics:
-                        if isinstance(item, dict) and item.get("name") == mname:
-                            mid = item.get("id") or item.get("_id")
-                            if mid is not None:
-                                mid = str(mid)
-                            break
-                if mid and mid not in metrics_values_map:
-                    needed_metric_ids.add(mid)
+                cache_key = f"{run_id}:{mname}"
+                if cache_key not in metrics_values_map:
+                    needed_queries.append((run_id, mname))
 
-        # Load missing metric values
-        if needed_metric_ids:
-            print(f"[METRICS] Loading {len(needed_metric_ids)} metric values on demand...", flush=True)
+        # Load missing metric values by run_id + name
+        if needed_queries:
+            print(f"[METRICS] Loading {len(needed_queries)} metric values on demand...", flush=True)
             try:
                 client = get_mongo_client_for_db(current_db)
-                new_values = fetch_metrics_values_map(client, current_db, list(needed_metric_ids))
+                new_values = fetch_metrics_by_run_and_name(client, current_db, needed_queries)
                 client.close()
                 # Merge with existing cache
                 metrics_values_map = {**metrics_values_map, **new_values}
@@ -115,39 +99,23 @@ def register_metrics_callbacks(app):
 
         filtered_runs = [run for run in runs if row_passes_filters(run.get("config", {}) or {})]
 
-        def extract_metric_id_for_run(run_metrics, metric_name):
-            if isinstance(run_metrics, dict):
-                v = run_metrics.get(metric_name, None)
-                if isinstance(v, dict) and v.get("id") is not None:
-                    return str(v.get("id"))
-                if isinstance(v, (str, ObjectId)):
-                    return str(v)
-                return None
-            if isinstance(run_metrics, list):
-                for item in run_metrics:
-                    if isinstance(item, dict) and item.get("name") == metric_name:
-                        mid = item.get("id") or item.get("_id")
-                        if mid is not None:
-                            return str(mid)
-                        return None
-            return None
-
         run_data = []
         all_step_values = set()
         for run in filtered_runs:
-            base = {"run_id": run.get("run_id", ""), "experiment": run.get("experiment", "")}
+            run_id = run.get("run_id", "")
+            base = {"run_id": run_id, "experiment": run.get("experiment", "")}
             cfg = run.get("config", {}) or {}
             if show_selected_keys:
                 for key in selected:
                     base[key] = cfg.get(key)
 
-            run_metrics = run.get("metrics", None)
             step_grid = None
             metric_series: Dict[str, List] = {}
             metric_steps: Dict[str, List] = {}
             for mname in selected_metrics:
-                mid = extract_metric_id_for_run(run_metrics, mname)
-                payload = metrics_values_map.get(str(mid), {}) if mid else {}
+                # Use run_id:metric_name as cache key
+                cache_key = f"{run_id}:{mname}"
+                payload = metrics_values_map.get(cache_key, {})
                 values = payload.get("values") or []
                 steps = payload.get("steps") or list(range(len(values)))
                 metric_series[mname] = values
